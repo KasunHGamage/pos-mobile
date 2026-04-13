@@ -11,14 +11,16 @@ import { RootStackParamList, MainTabParamList } from './types';
 
 // Screens
 import LoginScreen from '../screens/LoginScreen';
+import SignupScreen from '../screens/SignupScreen';
 import POSHomeScreen from '../screens/POSHomeScreen';
 import SalesScreen from '../screens/SalesScreen';
 import CustomersScreen from '../screens/CustomersScreen';
 import InventoryScreen from '../screens/InventoryScreen';
+import SalesAnalyticsScreen from '../screens/SalesAnalyticsScreen';
 import ReceiptScreen from '../screens/ReceiptScreen';
-import NotificationsScreen from '../screens/NotificationsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import ScannerScreen from '../screens/ScannerScreen';
+import DownloadReportScreen from '../screens/DownloadReportScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -109,10 +111,12 @@ export default function Navigation() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Signup" component={SignupScreen} />
         <Stack.Screen name="MainTabs" component={MainTabs} />
         <Stack.Screen name="Receipt" component={ReceiptScreen} />
-        <Stack.Screen name="Notifications" component={NotificationsScreen} />
         <Stack.Screen name="Customers" component={CustomersScreen} />
+        <Stack.Screen name="SalesAnalytics" component={SalesAnalyticsScreen} />
+        <Stack.Screen name="DownloadReport" component={DownloadReportScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

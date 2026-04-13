@@ -101,6 +101,12 @@ export default function LoginScreen({ navigation }: Props) {
         
         <View style={styles.footer}>
           <Text style={styles.footerText}>Optimized for rapid checkout</Text>
+          <View style={styles.signUpRow}>
+            <Text style={styles.signUpPrompt}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+              <Text style={styles.signUpLink}>Sign Up</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -198,11 +204,25 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   footer: {
-    marginTop: 60,
+    marginTop: 40,
     alignItems: 'center',
   },
   footerText: {
     color: colors.textMuted,
     fontSize: 14,
-  }
+    marginBottom: 16,
+  },
+  signUpRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  signUpPrompt: {
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+  signUpLink: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });

@@ -29,8 +29,8 @@ export const colors = {
   
   // Gradient arrays for react-native-linear-gradient
   gradients: {
-    primary: ['#4F46E5', '#6366F1', '#818CF8'], // Indigo gradient
-    header: ['#1E1B4B', '#312E81', '#4F46E5'], // Dark Indigo gradient
-    accent: ['#0EA5E9', '#38BDF8'], // Sky Blue gradient
+    primary: ['#4F46E5', '#6366F1', '#818CF8'] as const, // Indigo gradient
+    header: ['#1E1B4B', '#312E81', '#4F46E5'] as const,  // Dark Indigo gradient
+    accent: ['#0EA5E9', '#38BDF8'] as const,              // Sky Blue gradient
   }
 };
