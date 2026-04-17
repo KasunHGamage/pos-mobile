@@ -27,8 +27,8 @@ export default function LoginScreen({ navigation }: Props) {
   const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = () => {
-    // Navigate to Main Tabs after successful login
-    navigation.replace('MainTabs', { screen: 'Shop' });
+    // Navigate to OTP verification before entering the app
+    navigation.navigate('OtpVerify', { phone: email.trim() || '+94XXXXXXXXX', context: 'login' });
   };
 
   return (

@@ -11,6 +11,7 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   Login: undefined;
   Signup: undefined;
+  OtpVerify: { phone: string; context: 'signup' | 'login' };
   MainTabs: NavigatorScreenParams<MainTabParamList>;
   Receipt: {
     total: number;

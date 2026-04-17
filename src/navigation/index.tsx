@@ -12,6 +12,7 @@ import { RootStackParamList, MainTabParamList } from './types';
 // Screens
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
+import OtpVerifyScreen from '../screens/OtpVerifyScreen';
 import POSHomeScreen from '../screens/POSHomeScreen';
 import SalesScreen from '../screens/SalesScreen';
 import CustomersScreen from '../screens/CustomersScreen';
@@ -133,6 +134,7 @@ export default function Navigation() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Signup" component={SignupScreen} />
+        <Stack.Screen name="OtpVerify" component={OtpVerifyScreen} />
         <Stack.Screen name="MainTabs" component={MainTabs} />
         <Stack.Screen name="Receipt" component={ReceiptScreen} />
         <Stack.Screen name="Customers" component={CustomersScreen} />

@@ -111,11 +111,8 @@ export default function SignupScreen({ navigation }: Props) {
         password,
       });
 
-      Alert.alert(
-        '🎉 Account Created!',
-        'Your shop has been registered successfully. Please sign in.',
-        [{ text: 'Sign In', onPress: () => navigation.replace('Login') }],
-      );
+      // Navigate to OTP verification
+      navigation.replace('OtpVerify', { phone: phone.trim(), context: 'signup' });
     } catch (error: any) {
       Alert.alert('Registration Failed', error.message ?? 'Something went wrong. Please try again.');
     } finally {
