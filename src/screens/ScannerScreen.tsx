@@ -3,8 +3,10 @@ import { StyleSheet, Text, View, Button, TouchableOpacity } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useAudioPlayer } from 'expo-audio';
 import { colors } from '../theme/colors';
+import { useNavigation } from '@react-navigation/native';
 
 export default function ScannerScreen() {
+  const navigation = useNavigation();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const beepPlayer = useAudioPlayer('https://www.soundjay.com/buttons/beep-07a.mp3');
@@ -28,10 +30,15 @@ export default function ScannerScreen() {
     if (!scanned) {
       setScanned(true);
       beepPlayer.play();
-      // Dummy action: log or display data later
+      
       console.log(`Scanned ${type}: ${data}`);
-      // Reset scan state after a delay or navigate back
-      setTimeout(() => setScanned(false), 2000);
+      
+      // Navigate back to Invoice tab with the scanned SKU
+      navigation.navigate('Invoice' as any, { scannedSku: data });
+      
+      // We don't need setTimeout here because we are navigating away,
+      // but if the user comes back, we want it ready.
+      setScanned(false);
     }
   };
 
