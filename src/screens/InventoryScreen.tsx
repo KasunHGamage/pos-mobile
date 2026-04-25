@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -11,7 +11,10 @@ import {
   Button,
   KeyboardAvoidingView,
   Platform,
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,68 +26,127 @@ import AddProductModal from '../components/AddProductModal';
 import CategoriesModal from '../components/CategoriesModal';
 import EditCategoryModal from '../components/EditCategoryModal';
 import { useCurrency } from '../context/CurrencyContext';
+import { useAuth } from '../context/AuthContext';
+import { Product, getProductsList, toggleFeaturedProduct, saveProductChanges } from '../services/inventoryService';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'MainTabs'>;
 
-const INVENTORY_DATA = [
-  { id: '1', name: 'sugar', brand: 'Cosan', price: 220.0, qty: 1986, sales: 14, code: '4792210100262', category: 'ggg' },
-  { id: '2', name: 'CR Page 120', brand: 'Atlas', price: 365.0, qty: 4, sales: 8, code: '4792210100262', category: 'Stationery' },
-  { id: '3', name: 'Glu Bottle Medium', brand: 'Atlas', price: 80.0, qty: 4, sales: 8, code: '4792210100262', category: 'ggg' },
-  { id: '4', name: 'Cheese', brand: 'Happycow', price: 1200.0, qty: 13, sales: 7, code: '4792210100262', category: 'Dairy' },
-  { id: '5', name: 'Red rice', brand: 'Araliya', price: 175.0, qty: 1994, sales: 6, code: '4792210100262', category: 'Rice' },
-  { id: '6', name: 'sanitizer', brand: 'Nest', price: 1000.0, qty: 14, sales: 6, code: '4792210100262', category: 'Health' },
-  { id: '7', name: 'Apples', brand: 'Applo', price: 245.0, qty: 17, sales: 3, code: '4792210100262', category: 'Fruits' },
-];
-
 export default function InventoryScreen() {
   const navigation = useNavigation<NavigationProp>();
-  const [search, setSearch] = useState('');
-  const [selectedItem, setSelectedItem] = useState<typeof INVENTORY_DATA[0] | null>(null);
-  const [editForm, setEditForm] = useState<any>(null);
-  const [isFavorite, setIsFavorite] = useState(false);
-  const [isAddingItem, setIsAddingItem] = useState(false);
   const { currencySymbol } = useCurrency();
+  const { token } = useAuth();
+
+  // Products state
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState('');
+
+  // Edit modal state
+  const [selectedItem, setSelectedItem] = useState<Product | null>(null);
+  const [editForm, setEditForm] = useState<any>(null);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
+
+  const [isAddingItem, setIsAddingItem] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showCategoriesModal, setShowCategoriesModal] = useState(false);
-  const [selectedCategoryForEdit, setSelectedCategoryForEdit] = useState(null);
+  const [selectedCategoryForEdit, setSelectedCategoryForEdit] = useState<any>(null);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
+  const [categoriesRefreshKey, setCategoriesRefreshKey] = useState(0);
 
-  const filteredData = INVENTORY_DATA.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) || 
-                         item.brand.toLowerCase().includes(search.toLowerCase()) ||
-                         item.code.includes(search);
+  const loadProducts = useCallback(async (showRefresh = false) => {
+    try {
+      if (showRefresh) setRefreshing(true); else setLoading(true);
+      const data = await getProductsList(token || undefined);
+      setProducts(data);
+    } catch (error) {
+      console.error('Failed to load products:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [token]);
+
+  useEffect(() => { loadProducts(); }, [loadProducts]);
+
+  const filteredData = products.filter(item => {
+    const q = search.toLowerCase();
+    const matchesSearch = item.name.toLowerCase().includes(q) ||
+      (item.brand || '').toLowerCase().includes(q) ||
+      item.sku.toLowerCase().includes(q);
     const matchesCategory = selectedCategoryFilter ? item.category === selectedCategoryFilter : true;
     return matchesSearch && matchesCategory;
   });
 
-  const renderItem = ({ item }: { item: typeof INVENTORY_DATA[0] }) => (
+  const handleStarToggle = async (product: Product) => {
+    // Optimistically update UI
+    setProducts(prev => prev.map(p => p.id === product.id ? { ...p, isFeatured: !p.isFeatured } : p));
+    if (selectedItem?.id === product.id) {
+      setSelectedItem(prev => prev ? { ...prev, isFeatured: !prev.isFeatured } : prev);
+    }
+    try {
+      await toggleFeaturedProduct(product.id, token || undefined);
+    } catch (error) {
+      // Revert on failure
+      setProducts(prev => prev.map(p => p.id === product.id ? { ...p, isFeatured: product.isFeatured } : p));
+      Alert.alert('Error', 'Failed to update starred status');
+    }
+  };
+
+  const handleSaveChanges = async () => {
+    if (!selectedItem || !editForm) return;
+    try {
+      setIsSavingProduct(true);
+      const updated = await saveProductChanges(selectedItem.id, {
+        name: editForm.name,
+        sku: editForm.sku,
+        costPrice: editForm.cost ? parseFloat(editForm.cost) : undefined,
+        retailPrice: editForm.priceStr ? parseFloat(editForm.priceStr) : undefined,
+        discountPrice: editForm.discountAmt ? parseFloat(editForm.discountAmt) : undefined,
+        stock: editForm.qtyStr ? parseFloat(editForm.qtyStr) : undefined,
+        brand: editForm.brand,
+      }, token || undefined);
+      setProducts(prev => prev.map(p => p.id === updated.id ? updated : p));
+      setSelectedItem(null);
+      setEditForm(null);
+      Alert.alert('Success', 'Product updated!');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to save product');
+    } finally {
+      setIsSavingProduct(false);
+    }
+  };
+
+  const renderItem = ({ item }: { item: Product }) => (
     <TouchableOpacity 
       style={styles.tableRow} 
       onPress={() => {
         setSelectedItem(item);
         setEditForm({
-          ...item,
-          cost: (item.price * 0.8).toFixed(2),
+          name: item.name,
+          sku: item.sku,
+          code: item.sku,
+          cost: item.costPrice != null ? item.costPrice.toFixed(2) : '',
+          priceStr: item.price != null ? item.price.toFixed(2) : '',
           discount: '0.00',
-          discountAmt: '0.00',
-          qtyStr: item.qty.toFixed(1),
-          priceStr: item.price.toFixed(2)
+          discountAmt: item.discountPrice != null ? item.discountPrice.toFixed(2) : '0.00',
+          qtyStr: item.stock != null ? item.stock.toFixed(1) : '0.0',
+          brand: item.brand || '',
         });
-        setIsFavorite(false);
       }}
       activeOpacity={0.7}
     >
       <View style={styles.colName}>
         <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.itemBrand}>{item.brand}</Text>
+        <Text style={styles.itemBrand}>{item.brand || item.category || ''}</Text>
       </View>
       <Text style={[styles.colPrice, { color: colors.success }]}>
-        {item.price.toFixed(1)}
+        {(item.retailPrice != null ? item.retailPrice : item.price)?.toFixed(1)}
       </Text>
-      <Text style={[styles.colQty, { color: item.qty < 20 ? colors.error : colors.textDark }]}>
-        {item.qty}
+      <Text style={[styles.colQty, { color: (item.stock ?? 0) < 20 ? colors.error : colors.textDark }]}>
+        {item.stock}
       </Text>
-      <Text style={styles.colSales}>{item.sales}</Text>
+      <Text style={styles.colSales}>{(item as any).sales || 0}</Text>
     </TouchableOpacity>
   );
 
@@ -130,18 +192,37 @@ export default function InventoryScreen() {
 
       <View style={styles.tableHeader}>
         <Text style={styles.colNameHeader}>Product Name</Text>
-        <Text style={styles.colPriceHeader}>Unit Price({currencySymbol})</Text>
+        <Text style={styles.colPriceHeader}>Retail Price({currencySymbol})</Text>
         <Text style={styles.colQtyHeader}>Ava.Qty</Text>
         <Text style={styles.colSalesHeader}>No of Sales</Text>
       </View>
 
-      <FlatList
-        data={filteredData}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContainer}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-      />
+      {loading ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#A855F7" />
+        </View>
+      ) : (
+        <FlatList
+          data={filteredData}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContainer}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => loadProducts(true)}
+              tintColor="#A855F7"
+            />
+          }
+          ListEmptyComponent={
+            <View style={{ alignItems: 'center', paddingTop: 60 }}>
+              <Ionicons name="cube-outline" size={48} color="#CBD5E1" />
+              <Text style={{ color: '#94A3B8', marginTop: 12, fontSize: 15 }}>No products found</Text>
+            </View>
+          }
+        />
+      )}
 
       {/* Edit Modal matching Graphic 1 */}
       <Modal
@@ -157,17 +238,17 @@ export default function InventoryScreen() {
                   <ScrollView style={{ marginTop: 10 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
                     <View style={[styles.modalTopSection, { justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }]}>
                       <View style={styles.modalProductNumberBox}>
-                        <TouchableOpacity onPress={() => setIsFavorite(!isFavorite)} style={{ alignSelf: 'flex-start', marginBottom: 16 }}>
-                          <Ionicons name={isFavorite ? "star" : "star-outline"} size={32} color={isFavorite ? "#A855F7" : "#888"} />
+                        <TouchableOpacity onPress={() => handleStarToggle(selectedItem)} style={{ alignSelf: 'flex-start', marginBottom: 16 }}>
+                          <Ionicons name={selectedItem.isFeatured ? "star" : "star-outline"} size={32} color={selectedItem.isFeatured ? "#A855F7" : "#CBD5E1"} />
                         </TouchableOpacity>
                         <Text style={styles.modalProductNumberLabel}>Product Number</Text>
-                        <Text style={styles.modalProductNumberValue}>{selectedItem.code}</Text>
+                        <Text style={styles.modalProductNumberValue}>{selectedItem.sku}</Text>
                       </View>
 
                       <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={styles.modalQty}>{selectedItem.qty.toFixed(1)}</Text>
+                        <Text style={styles.modalQty}>{selectedItem.stock?.toFixed(1)}</Text>
                         <Text style={styles.modalQtyLabel}>Available Quantity</Text>
-                        <Text style={styles.modalOldPrice}>{currencySymbol} {selectedItem.price.toFixed(2)}</Text>
+                        <Text style={styles.modalOldPrice}>{currencySymbol} {selectedItem.price?.toFixed(2)}</Text>
                       </View>
                     </View>
 
@@ -177,7 +258,7 @@ export default function InventoryScreen() {
                       <Text style={styles.modalFieldLabel}>SKU Number</Text>
                       <View style={styles.modalInputBox}>
                         <Ionicons name="pricetag-outline" size={20} color={colors.textMuted} style={styles.inputIcon} />
-                        <TextInput style={styles.modalInput} value={editForm.code} onChangeText={v => setEditForm({...editForm, code: v})} />
+                        <TextInput style={styles.modalInput} value={editForm.sku} onChangeText={v => setEditForm({...editForm, sku: v})} />
                       </View>
                     </View>
 
@@ -255,10 +336,11 @@ export default function InventoryScreen() {
                       <Text style={styles.modalBtnCancelText}>Cancel</Text>
                     </TouchableOpacity>
                     <TouchableOpacity 
-                      style={styles.modalBtnSave}
-                      onPress={() => { setSelectedItem(null); setEditForm(null); }} // Dummy save
+                      style={[styles.modalBtnSave, isSavingProduct && { opacity: 0.7 }]}
+                      onPress={handleSaveChanges}
+                      disabled={isSavingProduct}
                     >
-                      <Text style={styles.modalBtnSaveText}>Save Changes</Text>
+                      <Text style={styles.modalBtnSaveText}>{isSavingProduct ? 'Saving...' : 'Save Changes'}</Text>
                     </TouchableOpacity>
                   </View>
                 </ScrollView>
@@ -269,7 +351,11 @@ export default function InventoryScreen() {
       </View>
     </Modal>
 
-      <AddProductModal visible={isAddingItem} onClose={() => setIsAddingItem(false)} />
+      <AddProductModal 
+        visible={isAddingItem} 
+        onClose={() => setIsAddingItem(false)} 
+        onProductAdded={() => loadProducts(true)}
+      />
 
       {/* Dropdown Menu Modal */}
       <Modal visible={showMenu} transparent={true} animationType="fade">
@@ -303,9 +389,13 @@ export default function InventoryScreen() {
       </Modal>
 
       <CategoriesModal
+        key={categoriesRefreshKey}
         visible={showCategoriesModal}
         onClose={() => setShowCategoriesModal(false)}
-        onEditCategory={(cat) => setSelectedCategoryForEdit(cat)}
+        onEditCategory={(cat) => {
+          setSelectedCategoryForEdit(cat);
+          setShowCategoriesModal(false);
+        }}
         onAnalyticsPress={() => {
           setShowCategoriesModal(false);
           navigation.navigate('CategoryAnalytics');
@@ -318,7 +408,13 @@ export default function InventoryScreen() {
           visible={!!selectedCategoryForEdit}
           category={selectedCategoryForEdit}
           onClose={() => setSelectedCategoryForEdit(null)}
-          onSave={() => setSelectedCategoryForEdit(null)}
+          onSave={() => {
+            setSelectedCategoryForEdit(null);
+            setCategoriesRefreshKey(k => k + 1);
+          }}
+          onSaveSuccess={() => {
+            setCategoriesRefreshKey(k => k + 1);
+          }}
         />
       )}
 
@@ -402,6 +498,7 @@ const styles = StyleSheet.create({
   colPrice: { flex: 1.5, fontSize: 14, fontWeight: '600', textAlign: 'center' },
   colQty: { flex: 1, fontSize: 14, fontWeight: 'bold', textAlign: 'center' },
   colSales: { flex: 1, fontSize: 14, color: colors.textMuted, fontWeight: '500', textAlign: 'right' },
+  colStar: { width: 32, alignItems: 'flex-end', justifyContent: 'center' },
   
   // Modal Styles
   modalOverlay: {

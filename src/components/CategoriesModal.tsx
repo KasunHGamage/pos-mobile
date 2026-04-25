@@ -1,25 +1,87 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Dimensions, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Dimensions, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
+import { useAuth } from '../context/AuthContext';
+import { getCategories, deleteCategoryApi } from '../services/inventoryService';
 
-const { height, width } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
+
+interface Category {
+  id: string;
+  name: string;
+  discount?: string | number | null;
+  discountType?: string | null;
+}
 
 interface CategoriesModalProps {
   visible: boolean;
   onClose: () => void;
-  onEditCategory: (cat: any) => void;
+  onEditCategory: (cat: Category) => void;
   onAnalyticsPress: () => void;
   onSelectCategory: (categoryName: string) => void;
 }
 
 export default function CategoriesModal({ visible, onClose, onEditCategory, onAnalyticsPress, onSelectCategory }: CategoriesModalProps) {
   const [search, setSearch] = useState('');
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(false);
+  const { token } = useAuth();
 
-  // Dummy categories based on screenshot
-  const categories = [
-    { id: '1', name: 'ggg' },
-  ];
+  useEffect(() => {
+    if (visible) {
+      loadCategories();
+    }
+  }, [visible]);
+
+  const loadCategories = async () => {
+    try {
+      setLoading(true);
+      const data = await getCategories(token || undefined);
+      setCategories(data);
+    } catch (error) {
+      console.error('Failed to load categories:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = (cat: Category) => {
+    Alert.alert(
+      'Delete Category',
+      `Are you sure you want to delete "${cat.name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteCategoryApi(cat.id, token || undefined);
+              setCategories(prev => prev.filter(c => c.id !== cat.id));
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to delete category');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleEditDone = (updatedCat: Category) => {
+    setCategories(prev => prev.map(c => c.id === updatedCat.id ? updatedCat : c));
+  };
+
+  const filteredCategories = categories.filter(c =>
+    c.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const getDiscountLabel = (cat: Category) => {
+    if (!cat.discount) return null;
+    const val = parseFloat(String(cat.discount));
+    if (!val) return null;
+    return cat.discountType === 'percentage' ? `${val}%` : `${val}`;
+  };
 
   return (
     <Modal visible={visible} animationType="fade" transparent>
@@ -31,7 +93,7 @@ export default function CategoriesModal({ visible, onClose, onEditCategory, onAn
             <View style={styles.header}>
               <Text style={styles.title}>Categories</Text>
               <TouchableOpacity style={styles.analyticsButton} onPress={onAnalyticsPress}>
-                 <Ionicons name="stats-chart" size={16} color="#FFF" />
+                <Ionicons name="stats-chart" size={16} color="#FFF" />
               </TouchableOpacity>
             </View>
 
@@ -40,38 +102,75 @@ export default function CategoriesModal({ visible, onClose, onEditCategory, onAn
               <Ionicons name="search" size={20} color="#000" style={styles.searchIcon} />
               <TextInput
                 style={styles.searchInput}
-                placeholder=""
+                placeholder="Search categories..."
+                placeholderTextColor="#9ca3af"
                 value={search}
                 onChangeText={setSearch}
               />
+              {search.length > 0 && (
+                <TouchableOpacity onPress={() => setSearch('')}>
+                  <Ionicons name="close-circle" size={18} color="#9ca3af" />
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* List */}
-            <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
-              {categories.map((cat) => (
-                <View key={cat.id} style={styles.listItem}>
-                  <View style={styles.leftSection}>
-                    <View style={styles.percentIconCircle}>
-                      <Text style={styles.percentIconText}>%</Text>
+            {loading ? (
+              <View style={styles.emptyBox}>
+                <ActivityIndicator color="#A855F7" size="small" />
+              </View>
+            ) : (
+              <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
+                {filteredCategories.length === 0 ? (
+                  <View style={styles.emptyBox}>
+                    <Ionicons name="pricetag-outline" size={36} color="#d1d5db" />
+                    <Text style={styles.emptyText}>
+                      {search ? 'No matching categories' : 'No categories yet'}
+                    </Text>
+                  </View>
+                ) : (
+                  filteredCategories.map((cat) => (
+                    <View key={cat.id} style={styles.listItem}>
+                      <View style={styles.leftSection}>
+                        <View style={[styles.discountCircle, !getDiscountLabel(cat) && styles.discountCircleEmpty]}>
+                          <Text style={[styles.discountText, !getDiscountLabel(cat) && styles.discountTextEmpty]}>
+                            {getDiscountLabel(cat) || '%'}
+                          </Text>
+                        </View>
+                        <View>
+                          <Text style={styles.categoryName} numberOfLines={1}>{cat.name}</Text>
+                          {getDiscountLabel(cat) && (
+                            <Text style={styles.discountSubText}>
+                              {cat.discountType === 'percentage' ? 'Percentage' : 'Amount'} discount
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                      <View style={styles.actionsBox}>
+                        <TouchableOpacity
+                          style={styles.actionBtn}
+                          onPress={() => { onSelectCategory(cat.name); onClose(); }}
+                        >
+                          <Ionicons name="square-outline" size={22} color="#000" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.actionBtn}
+                          onPress={() => { onEditCategory(cat); }}
+                        >
+                          <Ionicons name="pencil" size={18} color="#A855F7" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.actionBtn}
+                          onPress={() => handleDelete(cat)}
+                        >
+                          <Ionicons name="trash" size={18} color="#EF4444" />
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                    <Text style={styles.categoryName} numberOfLines={1}>{cat.name}</Text>
-                  </View>
-                  <View style={styles.actionsBox}>
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => { onSelectCategory(cat.name); onClose(); }}>
-                      <Ionicons name="square-outline" size={24} color="#000" />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => { onEditCategory(cat); onClose(); }}>
-                      <Ionicons name="pencil" size={18} color="#A855F7" />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionBtn}>
-                      <Ionicons name="trash" size={18} color="#EF4444" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-
-            {/* Overlay closing hit area is handled by closeHandleHorizontal outside this view */}
+                  ))
+                )}
+              </ScrollView>
+            )}
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -133,59 +232,85 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#000',
     borderRadius: 30,
-    paddingHorizontal: 16,
-    height: 48,
-    marginBottom: 24,
+    paddingHorizontal: 14,
+    height: 44,
+    marginBottom: 20,
   },
   searchIcon: {
-    marginRight: 10,
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 14,
+    color: '#000',
   },
   listContainer: {
     flex: 1,
+  },
+  emptyBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: 10,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#9ca3af',
+    textAlign: 'center',
   },
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
   },
   leftSection: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    gap: 10,
   },
-  percentIconCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: '#9ca3af',
+  discountCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#A855F7',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    backgroundColor: '#faf5ff',
   },
-  percentIconText: {
+  discountCircleEmpty: {
+    borderColor: '#d1d5db',
+    backgroundColor: '#f9fafb',
+  },
+  discountText: {
+    color: '#A855F7',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  discountTextEmpty: {
     color: '#9ca3af',
-    fontSize: 14,
-    fontWeight: '600',
   },
   categoryName: {
-    fontSize: 16,
-    color: '#334155',
-    fontWeight: '500',
+    fontSize: 14,
+    color: '#1f2937',
+    fontWeight: '600',
     flexShrink: 1,
-    marginLeft: 4,
+  },
+  discountSubText: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginTop: 1,
   },
   actionsBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 10,
   },
   actionBtn: {
     padding: 4,
-  }
+  },
 });

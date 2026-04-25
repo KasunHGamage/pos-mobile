@@ -16,11 +16,15 @@ export interface InventoryItem {
 export interface CreateInventoryPayload {
   name: string;
   sku: string;
-  category: string;
   price: number;
+  costPrice?: number;
+  retailPrice?: number;
+  discountPrice?: number;
   stock: number;
-  unit: string;
-  reorderLevel?: number;
+  category?: string;
+  categoryId?: string;
+  brand?: string;
+  unit?: string;
 }
 
 export interface UpdateInventoryPayload {
@@ -50,7 +54,67 @@ export interface InventoryResponse {
   error?: string;
 }
 
-// ─── Inventory Service ────────────────────────────────────────────────────────
+export interface Product {
+  id: string;
+  name: string;
+  sku: string;
+  price: number;
+  costPrice: number | null;
+  retailPrice: number | null;
+  discountPrice: number | null;
+  stock: number;
+  shopId: string;
+  category: string | null;
+  categoryId: string | null;
+  brand: string | null;
+  unit: string | null;
+  isFeatured: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Products ────────────────────────────────────────────────────────────────
+
+export async function getProductsList(token?: string, search?: string): Promise<Product[]> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const url = search ? `${ENDPOINTS.products.list}?search=${encodeURIComponent(search)}` : ENDPOINTS.products.list;
+  const response = await fetch(url, { headers });
+  if (!response.ok) throw new Error(`Failed to fetch products (${response.status})`);
+  const data = await response.json();
+  return data || [];
+}
+
+export async function toggleFeaturedProduct(id: string, token?: string): Promise<Product> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetch(ENDPOINTS.products.toggleFeatured(id), { method: 'PATCH', headers });
+  if (!response.ok) throw new Error(`Failed to toggle featured (${response.status})`);
+  return response.json();
+}
+
+export async function saveProductChanges(
+  id: string,
+  payload: {
+    name?: string; sku?: string; costPrice?: number; retailPrice?: number;
+    discountPrice?: number; stock?: number; brand?: string; unit?: string;
+    category?: string; categoryId?: string;
+  },
+  token?: string
+): Promise<Product> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetch(ENDPOINTS.products.update(id), {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const data = await response.json();
+    throw new Error(data?.error || `Failed to save product (${response.status})`);
+  }
+  return response.json();
+}
 
 /** List all products in inventory */
 export async function getInventoryList(token?: string): Promise<InventoryItem[]> {
@@ -142,7 +206,7 @@ export async function createInventoryItem(
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data?.message ?? `Item creation failed (${response.status})`);
+    throw new Error(data?.error ?? data?.message ?? `Item creation failed (${response.status})`);
   }
 
   return data;
@@ -202,4 +266,81 @@ export async function deleteInventoryItem(
   }
 
   return data;
+}
+
+// ─── Categories ───────────────────────────────────────────────────────────────
+
+export async function getCategories(token?: string): Promise<any[]> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(ENDPOINTS.categories.base, { headers });
+  if (!response.ok) throw new Error(`Failed to fetch categories (${response.status})`);
+  
+  const data = await response.json();
+  return data?.data || [];
+}
+
+export async function createCategoryApi(
+  payload: { name: string; discount?: string; discountType?: string },
+  token?: string
+): Promise<any> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(ENDPOINTS.categories.base, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.message || `Failed to create category (${response.status})`);
+  
+  return data?.data;
+}
+
+export async function updateCategoryApi(
+  id: string,
+  payload: { name?: string; discount?: string; discountType?: string },
+  token?: string
+): Promise<any> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(`${ENDPOINTS.categories.base}/${id}`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.message || `Failed to update category (${response.status})`);
+  return data?.data;
+}
+
+export async function deleteCategoryApi(
+  id: string,
+  token?: string
+): Promise<void> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(`${ENDPOINTS.categories.base}/${id}`, {
+    method: 'DELETE',
+    headers,
+  });
+
+  if (!response.ok) {
+    const data = await response.json();
+    throw new Error(data?.message || `Failed to delete category (${response.status})`);
+  }
 }

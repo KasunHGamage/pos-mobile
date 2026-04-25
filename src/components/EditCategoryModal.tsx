@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Dimensions, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Dimensions, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart, BarChart } from 'react-native-gifted-charts';
 import { Calendar } from 'react-native-calendars';
 import { colors } from '../theme/colors';
+import { useAuth } from '../context/AuthContext';
+import { updateCategoryApi } from '../services/inventoryService';
 
 const { height, width } = Dimensions.get('window');
 
@@ -12,16 +14,27 @@ interface EditCategoryModalProps {
   category: any;
   onClose: () => void;
   onSave: () => void;
+  onSaveSuccess?: (updatedCat: any) => void;
 }
 
-export default function EditCategoryModal({ visible, category, onClose, onSave }: EditCategoryModalProps) {
+export default function EditCategoryModal({ visible, category, onClose, onSave, onSaveSuccess }: EditCategoryModalProps) {
   const [activeTimeframe, setActiveTimeframe] = useState('Week');
   const [activeChartType, setActiveChartType] = useState('Line');
-  const [categoryName, setCategoryName] = useState(category?.name || 'ggg');
-  const [productDiscount, setProductDiscount] = useState('0.0');
-  const [discountType, setDiscountType] = useState('Percent'); 
+  const [categoryName, setCategoryName] = useState('');
+  const [productDiscount, setProductDiscount] = useState('');
+  const [discountType, setDiscountType] = useState<'percentage' | 'amount'>('percentage');
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedRange, setSelectedRange] = useState<any>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const { token } = useAuth();
+
+  useEffect(() => {
+    if (visible && category) {
+      setCategoryName(category.name || '');
+      setProductDiscount(category.discount ? String(parseFloat(String(category.discount))) : '');
+      setDiscountType((category.discountType as 'percentage' | 'amount') || 'percentage');
+    }
+  }, [visible, category]);
 
   const weekData = [
     { value: 0, label: '04/09' },
@@ -176,13 +189,14 @@ export default function EditCategoryModal({ visible, category, onClose, onSave }
                       value={productDiscount}
                       onChangeText={setProductDiscount}
                       keyboardType="numeric"
+                      placeholder="0"
                     />
-                    <TouchableOpacity 
-                      style={[styles.percentCircle, discountType === 'Amount' && styles.amountBadge]} 
-                      onPress={() => setDiscountType(discountType === 'Percent' ? 'Amount' : 'Percent')}
+                    <TouchableOpacity
+                      style={[styles.percentCircle, discountType === 'amount' && styles.amountBadge]}
+                      onPress={() => setDiscountType(discountType === 'percentage' ? 'amount' : 'percentage')}
                     >
-                      <Text style={[styles.percentText, discountType === 'Amount' && styles.amountText]}>
-                        {discountType === 'Percent' ? '%' : 'LKR'}
+                      <Text style={[styles.percentText, discountType === 'amount' && styles.amountText]}>
+                        {discountType === 'percentage' ? '%' : 'Amt'}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -194,8 +208,32 @@ export default function EditCategoryModal({ visible, category, onClose, onSave }
                 <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
                   <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.updateBtn} onPress={onSave}>
-                  <Text style={styles.updateBtnText}>Update</Text>
+                <TouchableOpacity
+                  style={[styles.updateBtn, isSaving && { opacity: 0.7 }]}
+                  disabled={isSaving}
+                  onPress={async () => {
+                    if (!categoryName.trim()) {
+                      Alert.alert('Validation', 'Category name is required');
+                      return;
+                    }
+                    try {
+                      setIsSaving(true);
+                      const updated = await updateCategoryApi(category.id, {
+                        name: categoryName,
+                        discount: productDiscount,
+                        discountType: discountType,
+                      }, token || undefined);
+                      if (onSaveSuccess) onSaveSuccess(updated);
+                      onSave();
+                      onClose();
+                    } catch (error: any) {
+                      Alert.alert('Error', error.message || 'Failed to update category');
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                >
+                  <Text style={styles.updateBtnText}>{isSaving ? 'Saving...' : 'Update'}</Text>
                 </TouchableOpacity>
               </View>
 

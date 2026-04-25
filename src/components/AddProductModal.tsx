@@ -17,17 +17,24 @@ import { useAudioPlayer } from 'expo-audio';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { useCurrency } from '../context/CurrencyContext';
+import { useAuth } from '../context/AuthContext';
+import { createInventoryItem } from '../services/inventoryService';
+import { Alert } from 'react-native';
+import SelectCategoryModal, { CategoryItem } from './SelectCategoryModal';
 
 interface AddProductModalProps {
   visible: boolean;
   onClose: () => void;
+  onProductAdded?: () => void;
 }
 
-export default function AddProductModal({ visible, onClose }: AddProductModalProps) {
+export default function AddProductModal({ visible, onClose, onProductAdded }: AddProductModalProps) {
   const [isScanning, setIsScanning] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const beepPlayer = useAudioPlayer('https://www.soundjay.com/buttons/beep-07a.mp3');
   const { currencySymbol } = useCurrency();
+  const { token } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State
   const [skuNumber, setSkuNumber] = useState('');
@@ -40,18 +47,33 @@ export default function AddProductModal({ visible, onClose }: AddProductModalPro
   const [brandName, setBrandName] = useState('');
   
   // Dropdowns State
-  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [showSelectCategoryModal, setShowSelectCategoryModal] = useState(false);
   const [category, setCategory] = useState('');
-  const CATEGORIES = ['Grocery', 'Electronics', 'Clothing', 'Stationary', 'Other'];
+  const [categoryId, setCategoryId] = useState<string | undefined>(undefined);
 
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [productType, setProductType] = useState('');
   const PRODUCT_TYPES = ['Units', 'kg', 'meter', 'pieces', 'liters', 'packs'];
 
+  const handleCategorySelect = (selectedCat: CategoryItem) => {
+    setCategory(selectedCat.name);
+    setCategoryId(selectedCat.id);
+    if (selectedCat.discount) {
+      if (selectedCat.discountType === 'percentage') {
+        setDiscountPercent(selectedCat.discount);
+        setDiscountAmt('');
+      } else if (selectedCat.discountType === 'amount') {
+        setDiscountAmt(selectedCat.discount);
+        setDiscountPercent('');
+      }
+    }
+  };
+
   const closeAddScreen = () => {
     onClose();
     setSkuNumber('');
     setCategory('');
+    setCategoryId(undefined);
     setProductType('');
     setProductName('');
     setProductCost('');
@@ -60,8 +82,40 @@ export default function AddProductModal({ visible, onClose }: AddProductModalPro
     setDiscountAmt('');
     setQuantity('');
     setBrandName('');
-    setShowCategoryPicker(false);
+    setShowSelectCategoryModal(false);
     setShowTypePicker(false);
+  };
+
+  const handleSave = async () => {
+    if (!productName || !retailPrice || !productCost || !quantity) {
+      Alert.alert('Validation Error', 'Please fill in all required fields (marked with *).');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await createInventoryItem({
+        name: productName,
+        sku: skuNumber || `SKU-${Date.now()}`,
+        price: parseFloat(retailPrice),
+        costPrice: parseFloat(productCost),
+        retailPrice: parseFloat(retailPrice),
+        discountPrice: discountAmt ? parseFloat(discountAmt) : undefined,
+        stock: parseInt(quantity, 10),
+        category: category,
+        categoryId: categoryId,
+        brand: brandName,
+        unit: productType,
+      }, token || undefined);
+      
+      Alert.alert('Success', 'Product added successfully!');
+      onProductAdded?.();
+      closeAddScreen();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to add product');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -111,11 +165,11 @@ export default function AddProductModal({ visible, onClose }: AddProductModalPro
               </TouchableOpacity>
 
               <View style={styles.addModalFields}>
-                 <View style={{ zIndex: showCategoryPicker ? 2000 : 1, elevation: showCategoryPicker ? 5 : 0 }}>
+                 <View style={{ zIndex: 1 }}>
                    <TouchableOpacity 
                      style={styles.newInputBox} 
                      activeOpacity={0.7} 
-                     onPress={() => setShowCategoryPicker(!showCategoryPicker)}
+                     onPress={() => setShowSelectCategoryModal(true)}
                    >
                      <Ionicons name="pricetag-outline" size={20} color={colors.textMuted} style={styles.newInputIcon} />
                      <Text style={[styles.newInput, !category && { color: colors.textMuted }]}>
@@ -123,21 +177,6 @@ export default function AddProductModal({ visible, onClose }: AddProductModalPro
                      </Text>
                      <Ionicons name="chevron-down" size={20} color="#E91E63" />
                    </TouchableOpacity>
-
-                   {showCategoryPicker && (
-                     <View style={[styles.inlineDropdown, { position: 'absolute', top: 58, left: 0, right: 0 }]}>
-                       {CATEGORIES.map((cat, i) => (
-                         <TouchableOpacity 
-                           key={i} 
-                           style={styles.inlineDropdownItem} 
-                           onPress={() => { setCategory(cat); setShowCategoryPicker(false); }}
-                         >
-                           <Text style={styles.inlineDropdownItemText}>{cat}</Text>
-                           {category === cat && <Ionicons name="checkmark" size={20} color="#A855F7" />}
-                         </TouchableOpacity>
-                       ))}
-                     </View>
-                   )}
                  </View>
 
                  <View style={styles.newInputBox}>
@@ -266,14 +305,26 @@ export default function AddProductModal({ visible, onClose }: AddProductModalPro
                  </View>
               </View>
 
-              <TouchableOpacity style={styles.addInventoryFinalBtn} onPress={() => { alert('Item added!'); closeAddScreen(); }}>
-                 <Text style={styles.addInventoryFinalBtnText}>Add Inventory</Text>
+              <TouchableOpacity 
+                style={[styles.addInventoryFinalBtn, isSubmitting && { opacity: 0.7 }]} 
+                onPress={handleSave}
+                disabled={isSubmitting}
+              >
+                 <Text style={styles.addInventoryFinalBtnText}>
+                   {isSubmitting ? 'Adding...' : 'Add Inventory'}
+                 </Text>
               </TouchableOpacity>
 
             </ScrollView>
           )}
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      <SelectCategoryModal
+        visible={showSelectCategoryModal}
+        onClose={() => setShowSelectCategoryModal(false)}
+        onSelectCategory={handleCategorySelect}
+      />
     </Modal>
   );
 }

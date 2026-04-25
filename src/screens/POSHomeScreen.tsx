@@ -37,6 +37,7 @@ type InventoryItem = {
   stock: number;
   unit: string;
   category: string;
+  isFeatured: boolean;
 };
 
 type CartItem = {
@@ -80,7 +81,11 @@ export default function POSHomeScreen() {
     try {
       const url = `${ENDPOINTS.products.list}?search=${encodeURIComponent(search)}`;
       const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
       });
       if (response.ok) {
         const data = await response.json();
@@ -91,7 +96,8 @@ export default function POSHomeScreen() {
           price: p.price,
           stock: p.stock,
           unit: p.unit || 'Pcs',
-          category: p.category || 'General'
+          category: p.category || 'General',
+          isFeatured: p.isFeatured || false,
         })));
       }
     } catch (error) {
@@ -189,7 +195,9 @@ export default function POSHomeScreen() {
 
   // ── UI State ─────────────────────────────────────────────────────────────────
   const [searchVisible, setSearchVisible] = useState(false);
+  const [quickInventoryVisible, setQuickInventoryVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [quickSearchQuery, setQuickSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [summaryExpanded, setSummaryExpanded] = useState(true);
 
@@ -203,6 +211,15 @@ export default function POSHomeScreen() {
     }
     return list;
   }, [products, searchQuery, activeCategory]);
+
+  const featuredInventory = useMemo(() => {
+    let list = products.filter(p => p.isFeatured);
+    if (quickSearchQuery.trim()) {
+      const q = quickSearchQuery.toLowerCase();
+      list = list.filter(p => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));
+    }
+    return list;
+  }, [products, quickSearchQuery]);
 
   // ── Totals ──────────────────────────────────────────────────────────────────
   const subTotal = cart.reduce((s, i) => s + i.originalPrice * i.qty, 0);
@@ -256,11 +273,11 @@ export default function POSHomeScreen() {
           <TouchableOpacity style={[styles.actionIcon, { backgroundColor: '#1E293B' }]}>
             <Ionicons name="pricetag-outline" size={18} color="#fff" />
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.actionIcon, { backgroundColor: '#C084FC' }]}
-            onPress={() => navigation.navigate('Scanner' as any)}
+            onPress={() => setQuickInventoryVisible(true)}
           >
-            <Ionicons name="barcode-outline" size={18} color="#fff" />
+            <Ionicons name="flash-outline" size={18} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity style={[styles.actionIcon, { backgroundColor: '#EC4899' }]}>
             <Ionicons name="copy-outline" size={18} color="#fff" />
@@ -302,7 +319,7 @@ export default function POSHomeScreen() {
         {summaryExpanded && (
           <View style={styles.invoiceSummaryBox}>
             <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Sub Total</Text><Text style={styles.summaryValue}>{currencySymbol} {subTotal.toFixed(2)}</Text></View>
-            <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Total Payment</Text><Text style={[styles.summaryValue, {color:'#A855F7', fontWeight:'bold'}]}>{currencySymbol} {finalTotal.toFixed(2)}</Text></View>
+            <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Total Payment</Text><Text style={[styles.summaryValue, { color: '#A855F7', fontWeight: 'bold' }]}>{currencySymbol} {finalTotal.toFixed(2)}</Text></View>
           </View>
         )}
 
@@ -319,7 +336,12 @@ export default function POSHomeScreen() {
         <SafeAreaView style={styles.searchScreen}>
           <View style={styles.searchScreenHeader}>
             <Text style={styles.searchScreenTitle}>Search Items</Text>
-            <TouchableOpacity onPress={() => setSearchVisible(false)}><Ionicons name="close" size={24} color="#333" /></TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity onPress={() => fetchProducts()} style={{ marginRight: 16 }}>
+                <Ionicons name="sync-outline" size={24} color="#A855F7" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setSearchVisible(false)}><Ionicons name="close" size={24} color="#333" /></TouchableOpacity>
+            </View>
           </View>
           <TextInput
             style={styles.searchInputRow}
@@ -343,6 +365,55 @@ export default function POSHomeScreen() {
                 </TouchableOpacity>
               )}
               contentContainerStyle={{ paddingHorizontal: 16 }}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
+
+      {/* Quick Inventory Modal */}
+      <Modal visible={quickInventoryVisible} animationType="slide">
+        <SafeAreaView style={styles.searchScreen}>
+          <View style={styles.searchScreenHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity onPress={() => setQuickInventoryVisible(false)} style={{ marginRight: 16 }}>
+                <Ionicons name="arrow-back" size={24} color="#333" />
+              </TouchableOpacity>
+              <Text style={styles.searchScreenTitle}>Quick Inventory List</Text>
+            </View>
+            <TouchableOpacity onPress={() => fetchProducts()}>
+              <Ionicons name="sync-outline" size={24} color="#A855F7" />
+            </TouchableOpacity>
+          </View>
+          <View style={[styles.searchInputRow, { flexDirection: 'row', alignItems: 'center' }]}>
+            <Ionicons name="search" size={20} color="#94A3B8" style={{ marginRight: 8 }} />
+            <TextInput
+              style={{ flex: 1, fontSize: 15 }}
+              placeholder="Search Inventory"
+              value={quickSearchQuery}
+              onChangeText={setQuickSearchQuery}
+            />
+          </View>
+          {isFetchingProducts ? (
+            <ActivityIndicator size="large" color="#A855F7" style={{ marginTop: 20 }} />
+          ) : (
+            <FlatList
+              data={featuredInventory}
+              keyExtractor={item => item.id}
+              numColumns={3}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.gridItem}
+                  onPress={() => { addItemToCart(item); setQuickInventoryVisible(false); }}
+                >
+                  <View style={styles.gridItemContent}>
+                    <Text style={styles.gridItemName} numberOfLines={2}>{item.name}</Text>
+                  </View>
+                  <View style={styles.gridItemPriceTag}>
+                    <Text style={styles.gridItemPriceText}>{item.price.toFixed(2)} LKR</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+              contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 24 }}
             />
           )}
         </SafeAreaView>
@@ -398,4 +469,9 @@ const styles = StyleSheet.create({
   invMeta: { fontSize: 12, color: '#94A3B8' },
   invAddBtn: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: '#A855F7' },
   invAddBtnText: { color: '#A855F7', fontWeight: 'bold' },
+  gridItem: { flex: 1, margin: 4, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#F1F5F9', overflow: 'hidden', alignItems: 'center', minHeight: 80, justifyContent: 'space-between' },
+  gridItemContent: { paddingHorizontal: 6, paddingVertical: 12, flex: 1, justifyContent: 'center' },
+  gridItemName: { fontSize: 13, fontWeight: '600', color: '#333', textAlign: 'center' },
+  gridItemPriceTag: { backgroundColor: '#A855F7', width: '100%', paddingVertical: 6, alignItems: 'center' },
+  gridItemPriceText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
 });
