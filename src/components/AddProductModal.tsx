@@ -53,6 +53,8 @@ export default function AddProductModal({ visible, onClose, onProductAdded }: Ad
 
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [productType, setProductType] = useState('');
+  const [unitType, setUnitType] = useState('PIECE'); // PIECE, WEIGHT, VOLUME
+  const [showUnitTypePicker, setShowUnitTypePicker] = useState(false);
   const PRODUCT_TYPES = ['Units', 'kg', 'meter', 'pieces', 'liters', 'packs'];
 
   const handleCategorySelect = (selectedCat: CategoryItem) => {
@@ -75,6 +77,7 @@ export default function AddProductModal({ visible, onClose, onProductAdded }: Ad
     setCategory('');
     setCategoryId(undefined);
     setProductType('');
+    setUnitType('PIECE');
     setProductName('');
     setProductCost('');
     setRetailPrice('');
@@ -84,6 +87,7 @@ export default function AddProductModal({ visible, onClose, onProductAdded }: Ad
     setBrandName('');
     setShowSelectCategoryModal(false);
     setShowTypePicker(false);
+    setShowUnitTypePicker(false);
   };
 
   const handleSave = async () => {
@@ -105,7 +109,12 @@ export default function AddProductModal({ visible, onClose, onProductAdded }: Ad
         category: category,
         categoryId: categoryId,
         brand: brandName,
+        brand: brandName,
         unit: productType,
+        unit_type: unitType,
+        unit_options: unitType === 'WEIGHT' ? { base_unit: 'kg', presets: [0.1, 0.25, 0.5, 1] } : 
+                     unitType === 'VOLUME' ? { base_unit: 'L', presets: [0.1, 0.25, 0.5, 1] } : 
+                     { base_unit: 'Unit', presets: [1, 2, 5, 10] },
       }, token || undefined);
       
       Alert.alert('Success', 'Product added successfully!');

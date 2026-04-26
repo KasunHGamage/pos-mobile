@@ -5,7 +5,7 @@
 // Switch between local and production backend:
 // LOCAL:      'http://192.168.x.x:8080/api'  ← your PC's local IP (for physical device)
 // LOCAL SIM:  'http://10.0.2.2:8080/api'     ← Android emulator
-export const BASE_URL = 'http://10.46.244.44:8080/api'; // ← Mac's current WiFi IP
+export const BASE_URL = 'http://192.168.1.201:8080/api'; // ← Mac's current WiFi IP
 // 192.168.56.1
 
 export const ENDPOINTS = {

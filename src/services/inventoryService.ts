@@ -10,6 +10,8 @@ export interface InventoryItem {
   price: number;
   stock: number;
   unit: string;
+  unit_type?: string;
+  unit_options?: any;
   reorderLevel?: number;
 }
 
@@ -25,6 +27,8 @@ export interface CreateInventoryPayload {
   categoryId?: string;
   brand?: string;
   unit?: string;
+  unit_type?: string;
+  unit_options?: any;
 }
 
 export interface UpdateInventoryPayload {
@@ -33,6 +37,8 @@ export interface UpdateInventoryPayload {
   price?: number;
   stock?: number;
   unit?: string;
+  unit_type?: string;
+  unit_options?: any;
   reorderLevel?: number;
 }
 
@@ -68,6 +74,8 @@ export interface Product {
   categoryId: string | null;
   brand: string | null;
   unit: string | null;
+  unit_type: string | null;
+  unit_options: any | null;
   isFeatured: boolean;
   createdAt: string;
   updatedAt: string;

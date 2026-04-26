@@ -23,6 +23,7 @@ import { RootStackParamList } from '../navigation/types';
 import { useCurrency } from '../context/CurrencyContext';
 import { useAuth } from '../context/AuthContext';
 import { ENDPOINTS } from '../config/api';
+import AddItemToCartModal from '../components/AddItemToCartModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,8 @@ type InventoryItem = {
   price: number;
   stock: number;
   unit: string;
+  unitType?: string;
+  unitOptions?: any;
   category: string;
   isFeatured: boolean;
 };
@@ -96,6 +99,8 @@ export default function POSHomeScreen() {
           price: p.price,
           stock: p.stock,
           unit: p.unit || 'Pcs',
+          unitType: p.unit_type,
+          unitOptions: p.unit_options,
           category: p.category || 'General',
           isFeatured: p.isFeatured || false,
         })));
@@ -187,8 +192,13 @@ export default function POSHomeScreen() {
   const updateQty = (id: string, delta: number) =>
     setCart(prev => prev.map(i => {
       if (i.id !== id) return i;
-      const newQty = Math.max(0.01, i.qty + delta);
-      return { ...i, qty: newQty };
+      const product = products.find(p => p.id === i.id);
+      const unitLower = (product?.unit || '').toLowerCase().trim();
+      const isWeight = ['kg', 'g'].includes(unitLower);
+      const isLiquid = ['liters', 'liter', 'l', 'ml'].includes(unitLower);
+      const step = (isWeight || isLiquid) ? 0.1 : 1;
+      const newQty = Math.max(step, i.qty + (delta * step));
+      return { ...i, qty: parseFloat(newQty.toFixed(3)) };
     }));
 
   const deleteItem = (id: string) => setCart(prev => prev.filter(i => i.id !== id));
@@ -200,6 +210,57 @@ export default function POSHomeScreen() {
   const [quickSearchQuery, setQuickSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [summaryExpanded, setSummaryExpanded] = useState(true);
+  const [selectedItemForAdd, setSelectedItemForAdd] = useState<InventoryItem | null>(null);
+
+  const addConfiguredItemToCart = (config: {
+    product: InventoryItem;
+    quantity: number;
+    itemPrice: number;
+    discountValue: number;
+    discountMode: 'percent' | 'amount';
+    saveItemPrice: boolean;
+    saveProductDiscount: boolean;
+  }) => {
+    const { product, quantity, itemPrice, discountValue, discountMode, saveItemPrice, saveProductDiscount } = config;
+    
+    if (saveItemPrice || saveProductDiscount) {
+      console.log('Would save item price/discount to backend:', { saveItemPrice, saveProductDiscount });
+    }
+
+    const subTotal = quantity * itemPrice;
+    const itemDiscountAmt = discountMode === 'percent' ? subTotal * (discountValue / 100) : discountValue;
+
+    const newItem: CartItem = {
+      id: product.id,
+      name: product.name,
+      unit: product.unit,
+      category: product.category,
+      originalPrice: product.price,
+      price: itemPrice,
+      qty: quantity,
+      discountValue,
+      discountMode,
+      itemDiscountAmt,
+    };
+
+    setCart(prev => {
+      const idx = prev.findIndex(c => c.id === product.id);
+      if (idx > -1) {
+        const updated = [...prev];
+        const newQty = updated[idx].qty + quantity;
+        const newSubTotal = newQty * itemPrice;
+        const newDiscountAmt = discountMode === 'percent' ? newSubTotal * (discountValue / 100) : discountValue;
+        
+        updated[idx] = { 
+          ...newItem, 
+          qty: newQty,
+          itemDiscountAmt: newDiscountAmt
+        };
+        return updated;
+      }
+      return [...prev, newItem];
+    });
+  };
 
   // ── Computed ──────────────────────────────────────────────────────────────────
   const filteredInventory = useMemo(() => {
@@ -222,7 +283,7 @@ export default function POSHomeScreen() {
   }, [products, quickSearchQuery]);
 
   // ── Totals ──────────────────────────────────────────────────────────────────
-  const subTotal = cart.reduce((s, i) => s + i.originalPrice * i.qty, 0);
+  const subTotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
   const itemDiscountTotal = cart.reduce((s, i) => s + i.itemDiscountAmt, 0);
   const afterItemDisc = subTotal - itemDiscountTotal;
   const invoiceDiscAmt = invoiceDiscountMode === 'percent' ? afterItemDisc * (invoiceDiscountValue / 100) : Math.min(invoiceDiscountValue, afterItemDisc);
@@ -230,29 +291,57 @@ export default function POSHomeScreen() {
 
   // ── Sub-renders ───────────────────────────────────────────────────────────────
 
-  const renderCartItem = ({ item }: { item: CartItem }) => (
-    <View style={styles.cartItemCard}>
-      <View style={styles.cartItemInfo}>
-        <Text style={styles.cartItemName}>{item.name}</Text>
-        <Text style={styles.cartItemPrice}>{item.originalPrice.toFixed(2)} {currencySymbol} × {item.qty} {item.unit}</Text>
+  const renderCartItem = ({ item }: { item: CartItem }) => {
+    const itemSubTotal = item.price * item.qty;
+    const finalAmount = itemSubTotal - item.itemDiscountAmt;
+
+    return (
+      <View style={styles.cartItemCard}>
+        <View style={styles.cartItemInfo}>
+          <Text style={styles.cartItemName}>{item.name}</Text>
+          <Text style={styles.cartItemPrice}>{item.price.toFixed(2)} {currencySymbol} × {item.qty} {item.unit}</Text>
+          {item.itemDiscountAmt > 0 && (
+            <Text style={{ fontSize: 11, color: '#A855F7', marginTop: 2, fontWeight: '500' }}>
+              Discount: -{item.itemDiscountAmt.toFixed(2)} {currencySymbol}
+            </Text>
+          )}
+        </View>
+        <View style={styles.qtyControlContainer}>
+          <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, -1)}>
+            <Ionicons name="remove" size={16} color={colors.textDark} />
+          </TouchableOpacity>
+          <Text style={[styles.qtyText, { fontSize: item.qty >= 100 ? 10 : 12 }]}>
+            {(() => {
+              const u = (item.unit || '').toLowerCase().trim();
+              if (['kg', 'g'].includes(u) && item.qty < 1) return `${item.qty * 1000}g`;
+              if (['liters', 'liter', 'l', 'ml'].includes(u) && item.qty < 1) return `${item.qty * 1000}ml`;
+              return item.qty;
+            })()}
+          </Text>
+          <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, 1)}>
+            <Ionicons name="add" size={16} color={colors.textDark} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.cartItemAmountContainer}>
+          {item.itemDiscountAmt > 0 ? (
+            <>
+              <Text style={[styles.cartItemAmount, { textDecorationLine: 'line-through', color: '#94A3B8', fontSize: 12 }]}>
+                {itemSubTotal.toFixed(1)}
+              </Text>
+              <Text style={[styles.cartItemAmount, { color: '#10B981', marginTop: 2 }]}>
+                {finalAmount.toFixed(1)}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.cartItemAmount}>{itemSubTotal.toFixed(1)}</Text>
+          )}
+          <TouchableOpacity onPress={() => deleteItem(item.id)} style={{ marginTop: 8 }}>
+            <Ionicons name="trash-outline" size={18} color="#EF4444" />
+          </TouchableOpacity>
+        </View>
       </View>
-      <View style={styles.qtyControlContainer}>
-        <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, -1)}>
-          <Ionicons name="remove" size={16} color={colors.textDark} />
-        </TouchableOpacity>
-        <Text style={styles.qtyText}>{item.qty}</Text>
-        <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, 1)}>
-          <Ionicons name="add" size={16} color={colors.textDark} />
-        </TouchableOpacity>
-      </View>
-      <View style={styles.cartItemAmountContainer}>
-        <Text style={styles.cartItemAmount}>{(item.price * item.qty).toFixed(1)}</Text>
-        <TouchableOpacity onPress={() => deleteItem(item.id)} style={{ marginTop: 8 }}>
-          <Ionicons name="trash-outline" size={18} color="#EF4444" />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -356,7 +445,7 @@ export default function POSHomeScreen() {
               data={filteredInventory}
               keyExtractor={item => item.id}
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.invRow} onPress={() => { addItemToCart(item); setSearchVisible(false); }}>
+                <TouchableOpacity style={styles.invRow} onPress={() => { setSelectedItemForAdd(item); setSearchVisible(false); }}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.invName}>{item.name}</Text>
                     <Text style={styles.invMeta}>{item.sku} · {item.price.toFixed(2)} {currencySymbol}</Text>
@@ -403,7 +492,7 @@ export default function POSHomeScreen() {
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.gridItem}
-                  onPress={() => { addItemToCart(item); setQuickInventoryVisible(false); }}
+                  onPress={() => { setSelectedItemForAdd(item); setQuickInventoryVisible(false); }}
                 >
                   <View style={styles.gridItemContent}>
                     <Text style={styles.gridItemName} numberOfLines={2}>{item.name}</Text>
@@ -418,6 +507,17 @@ export default function POSHomeScreen() {
           )}
         </SafeAreaView>
       </Modal>
+
+      {/* Add Item to Cart Modal */}
+      <AddItemToCartModal
+        visible={!!selectedItemForAdd}
+        product={selectedItemForAdd as any}
+        onClose={() => setSelectedItemForAdd(null)}
+        onAdd={(config) => {
+          addConfiguredItemToCart(config as any);
+          setSelectedItemForAdd(null);
+        }}
+      />
     </SafeAreaView>
   );
 }
