@@ -1,4 +1,5 @@
 import { ENDPOINTS } from '../config/api';
+import { apiFetch } from './apiService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,19 +85,15 @@ export interface Product {
 // ─── Products ────────────────────────────────────────────────────────────────
 
 export async function getProductsList(token?: string, search?: string): Promise<Product[]> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
   const url = search ? `${ENDPOINTS.products.list}?search=${encodeURIComponent(search)}` : ENDPOINTS.products.list;
-  const response = await fetch(url, { headers });
+  const response = await apiFetch(url);
   if (!response.ok) throw new Error(`Failed to fetch products (${response.status})`);
   const data = await response.json();
   return data || [];
 }
 
 export async function toggleFeaturedProduct(id: string, token?: string): Promise<Product> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const response = await fetch(ENDPOINTS.products.toggleFeatured(id), { method: 'PATCH', headers });
+  const response = await apiFetch(ENDPOINTS.products.toggleFeatured(id), { method: 'PATCH' });
   if (!response.ok) throw new Error(`Failed to toggle featured (${response.status})`);
   return response.json();
 }
@@ -110,11 +107,8 @@ export async function saveProductChanges(
   },
   token?: string
 ): Promise<Product> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const response = await fetch(ENDPOINTS.products.update(id), {
+  const response = await apiFetch(ENDPOINTS.products.update(id), {
     method: 'PUT',
-    headers,
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
@@ -126,15 +120,7 @@ export async function saveProductChanges(
 
 /** List all products in inventory */
 export async function getInventoryList(token?: string): Promise<InventoryItem[]> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const response = await fetch(ENDPOINTS.inventory.list, { headers });
+  const response = await apiFetch(ENDPOINTS.inventory.list);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch inventory (${response.status})`);

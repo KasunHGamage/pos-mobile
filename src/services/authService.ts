@@ -8,6 +8,11 @@ const USER_KEY  = '@pos_auth_user';
 const SHOP_KEY  = '@pos_auth_shop';
 
 export async function saveAuthData(token: string, user: any, shop: any): Promise<void> {
+  // Store specifically with the 'token' key as requested for the API interceptor
+  await AsyncStorage.setItem('token', token);
+  console.log("Saved token:", token);
+
+  // Also maintain the old keys to avoid breaking legacy hooks temporarily
   await AsyncStorage.multiSet([
     [TOKEN_KEY, token],
     [USER_KEY,  JSON.stringify(user)],
@@ -16,6 +21,9 @@ export async function saveAuthData(token: string, user: any, shop: any): Promise
 }
 
 export async function getToken(): Promise<string | null> {
+  // Try the new explicit 'token' key first, fallback to TOKEN_KEY
+  const t = await AsyncStorage.getItem('token');
+  if (t) return t;
   return AsyncStorage.getItem(TOKEN_KEY);
 }
 
