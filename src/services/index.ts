@@ -1,6 +1,7 @@
 // ─── Services Barrel Export ───────────────────────────────────────────────────
 // Import and export all services from a single location
 
+export * from './apiService';
 export * from './authService';
 export * from './salesService';
 export * from './inventoryService';

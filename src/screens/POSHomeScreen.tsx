@@ -23,6 +23,7 @@ import { RootStackParamList } from '../navigation/types';
 import { useCurrency } from '../context/CurrencyContext';
 import { useAuth } from '../context/AuthContext';
 import { ENDPOINTS } from '../config/api';
+import { apiFetch } from '../services/apiService';
 import AddItemToCartModal from '../components/AddItemToCartModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -82,14 +83,11 @@ export default function POSHomeScreen() {
     if (!token) return;
     setIsFetchingProducts(true);
     try {
+      console.log("Fetching products...");
       const url = `${ENDPOINTS.products.list}?search=${encodeURIComponent(search)}`;
-      const response = await fetch(url, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      
+      const response = await apiFetch(url);
+      
       if (response.ok) {
         const data = await response.json();
         setProducts(data.map((p: any) => ({

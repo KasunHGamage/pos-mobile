@@ -1,10 +1,12 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, Platform } from 'react-native';
 import { colors } from '../theme/colors';
+
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 // Types
 import { RootStackParamList, MainTabParamList } from './types';
@@ -25,7 +27,6 @@ import BillInventoryHistoryScreen from '../screens/BillInventoryHistoryScreen';
 import UserSettingsScreen from '../screens/UserSettingsScreen';
 import AboutAppScreen from '../screens/AboutAppScreen';
 import AppSettingsScreen from '../screens/AppSettingsScreen';
-import InventoryScreen from '../screens/InventoryScreen';
 import SalesAnalyticsScreen from '../screens/SalesAnalyticsScreen';
 import ReceiptScreen from '../screens/ReceiptScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -43,6 +44,7 @@ import SupplierPurchaseOrdersScreen from '../screens/SupplierPurchaseOrdersScree
 import CreatePurchaseOrderScreen from '../screens/CreatePurchaseOrderScreen';
 import ProductListScreen from '../screens/ProductListScreen';
 import SupplierGRNScreen from '../screens/SupplierGRNScreen';
+import InventoryScreen from '../screens/InventoryScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -130,7 +132,7 @@ function MainTabs() {
 
 export default function Navigation() {
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Signup" component={SignupScreen} />
